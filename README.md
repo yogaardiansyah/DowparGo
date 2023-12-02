@@ -35,4 +35,7 @@ Untuk menggunakan program ini, ikuti langkah-langkah di bawah ini:
 Contoh penggunaan:
 
 ```bash
-go run main.go -url (https://example.com/largefile.zip) <lokasi_direktori> 
+go run main.go -url (https://example.com/largefile.zip) <lokasi_direktori>
+```
+
+Dibuat Oleh Yoga Ardiansyah
