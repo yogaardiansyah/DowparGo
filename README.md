@@ -37,7 +37,7 @@ Untuk menggunakan program ini, ikuti langkah-langkah di bawah ini:
 Contoh penggunaan:
 
 ```bash
-go run main.go -url https://static.wikia.nocookie.net/minecraft_gamepedia/images/a/a4/Bedrock_trading_interface.png -output /direktoriKeluar --keep-partition
+go run main.go -url https://static.wikia.nocookie.net/minecraft_gamepedia/images/a/a4/Bedrock_trading_interface.png -output C:/...(lokasi)/ --keep-partition
 ```
 # Fitur
     - Mengunduh berkas dari URL yang ditentukan.
