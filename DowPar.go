@@ -19,29 +19,29 @@ import (
 )
 
 const (
-	// Definisikan Konstanta threshold ukuran file untuk partisi
-	thresholdSizeLarge    = 5 * 1024 * 1024 // 5 MB (super besar)
-	thresholdSizeSuperBig = 3 * 1024 * 1024 // 3 MB (besar)
-	thresholdSizeMedium   = 500 * 1024      // 500 KB (medium)
-	thresholdSizeSmall    = 10 * 1024       // 10 KB (kecil)
+	thresholdSizeLarge    = 5 * 1024 * 1024
+	thresholdSizeSuperBig = 3 * 1024 * 1024
+	thresholdSizeMedium   = 500 * 1024
+	thresholdSizeSmall    = 10 * 1024
 	bufferSize            = 8192
 )
+
+var mutex sync.Mutex
 
 func main() {
 	var inputURL, outputDir string
 	var keepPartition, removePartition bool
 
-	// Gunakan flag untuk mengambil argumen dari baris perintah
-	flag.StringVar(&inputURL, "url", "", "URL untuk diunduh")
-	flag.StringVar(&outputDir, "output", "output", "Direktori output untuk partisi dan file yang digabungkan")
-	flag.BoolVar(&keepPartition, "keep-partition", false, "Biarkan file partisi setelah digabungkan")
-	flag.BoolVar(&removePartition, "remove-partition", false, "Hapus direktori partisi setelah digabungkan")
+	flag.StringVar(&inputURL, "url", "", "URL to download")
+	flag.StringVar(&outputDir, "output", "output", "Output directory for partitions and merged file")
+	flag.BoolVar(&keepPartition, "keep-partition", false, "Keep partition files after merging")
+	flag.BoolVar(&removePartition, "remove-partition", false, "Remove partition directory after merging")
 
 	flag.Parse()
 
-	// Periksa apakah argumen URL diberikan
 	if inputURL == "" {
-		fmt.Println("Penggunaan: go run main.go -url <URL> [--keep-partition|--remove-partition]")
+		fmt.Println("Usage: go run main.go -url <URL> [--keep-partition|--remove-partition] -output <Directory>")
+		fmt.Println("Example Usage: go run main.go -url https://example.com/file.zip -output /outputDir")
 		return
 	}
 
@@ -53,7 +53,7 @@ func main() {
 func downloadAndSplit(url, outputDir string, keepPartition, removePartition bool) error {
 	resp, err := http.Get(url)
 	if err != nil {
-		return fmt.Errorf("gagal memulai pengunduhan: %v", err)
+		return fmt.Errorf("failed to initiate download: %v", err)
 	}
 	defer resp.Body.Close()
 
@@ -61,39 +61,29 @@ func downloadAndSplit(url, outputDir string, keepPartition, removePartition bool
 	outputFilePath := filepath.Join(outputDir, "final", baseFileName)
 
 	if resp.ContentLength < thresholdSizeSmall {
-		fmt.Println("File kecil. Tidak perlu dipartisi.")
+		fmt.Println("Small file. No need to split.")
 		return downloadToFile(url, outputFilePath)
 	}
 
 	if err := os.MkdirAll(outputDir, os.ModePerm); err != nil {
-		return fmt.Errorf("gagal membuat direktori output: %v", err)
+		return fmt.Errorf("failed to create output directory: %v", err)
 	}
 
-	numPartitions := 1
-	fileSize := resp.ContentLength
+	numPartitions := calculateNumPartitions(resp.ContentLength)
 
-	switch {
-	case fileSize > thresholdSizeSuperBig:
-		numPartitions = 10
-	case fileSize > thresholdSizeLarge:
-		numPartitions = 5
-	case fileSize > thresholdSizeMedium:
-		numPartitions = 2
-	}
+	fmt.Printf("Downloading %d partitions...\n", numPartitions)
 
-	fmt.Printf("Mengunduh %d partisi...\n", numPartitions)
-
-	downloadSize := fileSize / int64(numPartitions)
+	downloadSize := resp.ContentLength / int64(numPartitions)
 	allDone := make(chan bool, numPartitions)
-	partitionDir := filepath.Join(outputDir, "partisi")
+	partitionDir := filepath.Join(outputDir, "partitions")
 	finalDir := filepath.Join(outputDir, "final")
 
 	if err := os.MkdirAll(partitionDir, os.ModePerm); err != nil {
-		return fmt.Errorf("gagal membuat direktori partisi: %v", err)
+		return fmt.Errorf("failed to create partition directory: %v", err)
 	}
 
 	if err := os.MkdirAll(finalDir, os.ModePerm); err != nil {
-		return fmt.Errorf("gagal membuat direktori final: %v", err)
+		return fmt.Errorf("failed to create final directory: %v", err)
 	}
 
 	var wg sync.WaitGroup
@@ -103,16 +93,16 @@ func downloadAndSplit(url, outputDir string, keepPartition, removePartition bool
 		partitionFileName := fmt.Sprintf("part%d_%s", i+1, baseFileName)
 		partitionPath := filepath.Join(partitionDir, partitionFileName)
 		startRange := int64(i) * downloadSize
-		endRange := startRange + downloadSize - 1 // Sesuaikan akhiran agar tidak tumpang tindih
+		endRange := startRange + downloadSize - 1
 
 		if i == numPartitions-1 {
-			endRange = fileSize - 1
+			endRange = resp.ContentLength - 1
 		}
 
 		go func(partitionNum int, start, end int64, path string, done chan bool) {
 			defer wg.Done()
 			if err := downloadRange(url, path, start, end, partitionNum, numPartitions, done); err != nil {
-				log.Printf("Error mengunduh partisi %d: %v", partitionNum, err)
+				log.Printf("Error downloading partition %d: %v", partitionNum, err)
 			}
 		}(i+1, startRange, endRange, partitionPath, allDone)
 	}
@@ -125,53 +115,68 @@ func downloadAndSplit(url, outputDir string, keepPartition, removePartition bool
 	for range allDone {
 	}
 
-	fmt.Println("Semua partisi diunduh. Menggabungkan...")
+	fmt.Println("All partitions downloaded. Merging...")
 
 	if err := mergePartitions(partitionDir, finalDir, outputFilePath, keepPartition, removePartition); err != nil {
-		log.Printf("Error menggabungkan partisi: %v", err)
+		log.Printf("Error merging partitions: %v", err)
 	} else {
-		fmt.Println("Pengunduhan dan penggabungan selesai.")
+		fmt.Println("Download and merge complete.")
 	}
 
 	return nil
+}
+
+// calculateNumPartitions calculates the number of partitions based on the file size.
+func calculateNumPartitions(fileSize int64) int {
+	switch {
+	case fileSize > thresholdSizeSuperBig:
+		return 10
+	case fileSize > thresholdSizeLarge:
+		return 5
+	case fileSize > thresholdSizeMedium:
+		return 2
+	default:
+		return 1
+	}
 }
 
 func downloadRange(url, outputPath string, start, end int64, partitionNum, totalPartitions int, done chan bool) error {
 	client := http.Client{}
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return fmt.Errorf("gagal membuat permintaan HTTP: %v", err)
+		return fmt.Errorf("failed to create HTTP request: %v", err)
 	}
 
 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start, end))
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("gagal melakukan permintaan HTTP: %v", err)
+		return fmt.Errorf("failed to perform HTTP request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	file, err := os.Create(outputPath)
 	if err != nil {
-		return fmt.Errorf("gagal membuat file output: %v", err)
+		return fmt.Errorf("failed to create output file: %v", err)
 	}
-	defer file.Close()
-
-	totalBytes := end - start
-	downloadedBytes := int64(0)
-	buffer := make([]byte, 1024)
-
 	defer func() {
+		file.Close()
 		fmt.Println()
 		done <- true
 	}()
 
+	totalBytes := end - start
+	downloadedBytes := int64(0)
+	buffer := make([]byte, bufferSize)
+
+	mutex.Lock()
+	defer mutex.Unlock()
 	progressBarWidth := 50
 
 	for {
 		n, err := resp.Body.Read(buffer)
 		if err != nil && err != io.EOF {
-			log.Printf("Error membaca isi tubuh respons: %v", err)
+			log.Printf("Error reading response body: %v", err)
 			return err
 		}
 		if n == 0 {
@@ -179,13 +184,17 @@ func downloadRange(url, outputPath string, start, end int64, partitionNum, total
 		}
 
 		downloadedBytes += int64(n)
-		progress := (float64(downloadedBytes) / float64(totalBytes)) * 100.0
 		progressBar := int((float64(downloadedBytes) / float64(totalBytes)) * float64(progressBarWidth))
 
-		// Pemalsuan penundaan untuk mensimulasikan pembaruan progres yang lebih lambat
+		// Fake delay to simulate slower progress update
 		time.Sleep(50 * time.Millisecond)
 
-		fmt.Printf("(partisi %d) [%s%s] %.2f%%\r", partitionNum, strings.Repeat("=", progressBar), strings.Repeat(" ", progressBarWidth-progressBar), progress)
+		fmt.Printf("(partition %d) [%s%s] %.2f%%\r", partitionNum, strings.Repeat("=", progressBar), strings.Repeat(" ", progressBarWidth-progressBar), float64(downloadedBytes)/float64(totalBytes)*100.0)
+
+		_, err = file.Write(buffer[:n])
+		if err != nil {
+			return fmt.Errorf("failed to write to output file: %v", err)
+		}
 
 		file.Sync()
 	}
@@ -196,52 +205,81 @@ func downloadRange(url, outputPath string, start, end int64, partitionNum, total
 func mergePartitions(partitionDir, finalDir, outputFilePath string, keepPartition, removePartition bool) error {
 	files, err := filepath.Glob(filepath.Join(partitionDir, "*"))
 	if err != nil {
-		return fmt.Errorf("gagal melisting file partisi: %v", err)
+		return fmt.Errorf("failed to list partition files: %v", err)
 	}
 
 	if len(files) == 0 {
-		return fmt.Errorf("tidak ada file partisi yang ditemukan")
+		return fmt.Errorf("no partition files found")
 	}
 
 	mergedFile, err := os.Create(outputFilePath)
 	if err != nil {
-		return fmt.Errorf("gagal membuat file yang digabungkan: %v", err)
+		return fmt.Errorf("failed to create merged file: %v", err)
 	}
 	defer mergedFile.Close()
 
-	// Urutkan file untuk memastikan urutan yang benar
+	// Sort files to ensure correct order
 	sort.Strings(files)
 
-	for i, file := range files {
-		if err := mergeFile(mergedFile, file); err != nil {
-			return fmt.Errorf("gagal menggabungkan partisi %d: %v", i+1, err)
-		}
+	var previousBaseName string
 
-		// Secara opsional, biarkan file partisi setelah digabungkan
-		if keepPartition {
-			finalFileName := fmt.Sprintf("part%d_%s", i+1, filepath.Base(file))
-			finalPath := filepath.Join(finalDir, finalFileName)
-			if err := os.Rename(file, finalPath); err != nil {
-				return fmt.Errorf("gagal mengubah nama file partisi: %v", err)
+	for i, file := range files {
+		baseName := getBaseFileName(file)
+		ext := filepath.Ext(file)
+
+		if i > 0 && baseName == previousBaseName {
+			// Partisi dengan nama yang sama, gabungkan hanya jika tipe file sama
+			previousExt := filepath.Ext(files[i-1])
+			if ext != previousExt {
+				return fmt.Errorf("partitions with the same base name but different file types cannot be merged")
+			}
+
+			if err := mergeFile(mergedFile, file); err != nil {
+				return fmt.Errorf("failed to merge partition %d: %v", i+1, err)
+			}
+
+			// Optionally, keep the partition files after merging
+			if keepPartition {
+				finalFileName := fmt.Sprintf("part%d_%s", i+1, filepath.Base(file))
+				finalPath := filepath.Join(finalDir, finalFileName)
+				if err := os.Rename(file, finalPath); err != nil {
+					return fmt.Errorf("failed to rename partition file: %v", err)
+				}
+			}
+		} else {
+			// Partisi baru dengan base name yang berbeda, langsung tambahkan ke merged file
+			if err := mergeFile(mergedFile, file); err != nil {
+				return fmt.Errorf("failed to merge partition %d: %v", i+1, err)
+			}
+
+			// Optionally, keep the partition files after merging
+			if keepPartition {
+				finalFileName := fmt.Sprintf("part%d_%s", i+1, filepath.Base(file))
+				finalPath := filepath.Join(finalDir, finalFileName)
+				if err := os.Rename(file, finalPath); err != nil {
+					return fmt.Errorf("failed to rename partition file: %v", err)
+				}
 			}
 		}
+
+		previousBaseName = baseName
 	}
 
-	// Secara opsional, hapus direktori partisi setelah digabungkan
+	// Optionally, remove the partition directory after merging
 	if removePartition {
 		if err := os.RemoveAll(partitionDir); err != nil {
-			return fmt.Errorf("gagal menghapus direktori partisi: %v", err)
+			return fmt.Errorf("failed to remove partition directory: %v", err)
 		}
 	}
 
-	fmt.Println("Partisi digabungkan.")
+	fmt.Println("Partitions merged.")
 	return nil
 }
 
 func mergeFile(dst *os.File, srcPath string) error {
 	src, err := os.Open(srcPath)
 	if err != nil {
-		return fmt.Errorf("gagal membuka file partisi: %v", err)
+		return fmt.Errorf("failed to open partition file: %v", err)
 	}
 	defer src.Close()
 
@@ -317,22 +355,22 @@ func mergeTar(dst *os.File, src *os.File) error {
 func downloadToFile(url, outputPath string) error {
 	resp, err := http.Get(url)
 	if err != nil {
-		return fmt.Errorf("gagal memulai pengunduhan: %v", err)
+		return fmt.Errorf("failed to initiate download: %v", err)
 	}
 	defer resp.Body.Close()
 
 	outFile, err := os.Create(outputPath)
 	if err != nil {
-		return fmt.Errorf("gagal membuat file output: %v", err)
+		return fmt.Errorf("failed to create output file: %v", err)
 	}
 	defer outFile.Close()
 
 	_, err = io.Copy(outFile, resp.Body)
 	if err != nil {
-		return fmt.Errorf("gagal menyalin tubuh respons: %v", err)
+		return fmt.Errorf("failed to copy response body: %v", err)
 	}
 
-	fmt.Println("Pengunduhan selesai.")
+	fmt.Println("Download complete.")
 	return nil
 }
 
