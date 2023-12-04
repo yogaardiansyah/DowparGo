@@ -12,13 +12,15 @@ Untuk menggunakan program ini, ikuti langkah-langkah di bawah ini:
 2. Unduh kode program:
 
     ```bash
-    git clone https://github.com/username/repository.git
+    [git clone https://github.com/username/repository.git](https://github.com/yogaardiansyah/DowparGo.git)
     ```
 
 3. Pindah ke direktori program:
 
     ```bash
-    cd repository
+    buka terminal lalu masuk ke direktori dengan :
+    
+    cd (lokasi_repository)
     ```
 
 4. Jalankan program dengan perintah berikut:
