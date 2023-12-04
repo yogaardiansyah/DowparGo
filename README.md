@@ -39,5 +39,21 @@ Contoh penggunaan:
 ```bash
 go run main.go -url https://static.wikia.nocookie.net/minecraft_gamepedia/images/a/a4/Bedrock_trading_interface.png -output /direktoriKeluar --keep-partition
 ```
+# Fitur
+    - Mengunduh berkas dari URL yang ditentukan.
+    - Menentukan otomatis apakah berkas perlu dibagi berdasarkan ukurannya.
+    - Membagi berkas menjadi beberapa partisi dan mengunduhnya secara bersamaan.
+    - Menggabungkan partisi menjadi berkas akhir.
+    - Fitur opsional untuk menyimpan atau menghapus berkas partisi setelah penggabungan.
 
+# Batas Partisi
+Tools ini menggunakan ambang batas berikut untuk menentukan jumlah partisi:
+
+    - Berkas kecil: < 10 KB (tidak dipartisi)
+    - Berkas menengah: 10 KB - 500 KB (2 Partisi)
+    - Berkas besar: 500 KB - 5 MB (5 Partisi)
+    - Berkas sangat besar: > 5 MB (10 Partisi)
+    
+```
 Dibuat Oleh Saya
+```
