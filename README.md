@@ -26,13 +26,13 @@ Untuk menggunakan program ini, ikuti langkah-langkah di bawah ini:
 4. Jalankan program dengan perintah berikut:
 
     ```bash
-    go run main.go -url <URL> <lokasi_direktori> [--keep-partition|--remove-partition]
+    go run main.go -url <URL> -output <lokasi_direktori> [--keep-partition|--remove-partition]
     ```
 
     - `<URL>`: URL file yang akan diunduh.
     - `--keep-partition`: Opsional, biarkan file partisi setelah digabungkan.
     - `--remove-partition`: Opsional, hapus direktori partisi setelah digabungkan.
-    - secara general keep-partition telah berjalan
+    - secara default keep-partition telah berjalan
 
 Contoh penggunaan:
 
