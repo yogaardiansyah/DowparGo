@@ -7,7 +7,7 @@ Program ini memungkinkan Anda mengunduh file dari URL yang diberikan, membaginya
 
 Untuk menggunakan program ini, ikuti langkah-langkah di bawah ini:
 
-1. Pastikan Anda memiliki lingkungan Go yang terinstal di sistem.
+1. Pastikan Anda memiliki lingkungan Go yang terinstal di sistem. [jika belum](https://go.dev/doc/install)
 
 2. Unduh kode program:
 
@@ -35,7 +35,7 @@ Untuk menggunakan program ini, ikuti langkah-langkah di bawah ini:
 Contoh penggunaan:
 
 ```bash
-go run main.go -url (https://example.com/largefile.zip) <lokasi_direktori>
+go run main.go -url https://static.wikia.nocookie.net/minecraft_gamepedia/images/a/a4/Bedrock_trading_interface.png -output /direktoriKeluar --keep-partition
 ```
 
-Dibuat Oleh Yoga Ardiansyah
+Dibuat Oleh Saya
